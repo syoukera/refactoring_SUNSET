@@ -1,0 +1,199 @@
+C********************************************************************
+C
+      SUBROUTINE INOUTS
+C
+C-----THIS SUBROUTINE HAS 4 ENTRIES, CONVOL, CONFIG, INITIA AND
+C-----PRINTS ASSOCIATED WITH INPUT AND OUTPUT PROCEDURES.
+C
+      CHARACTER*4 HEADIN(7,10)
+      COMMON         PHI(40,240),PHIOLD(40,240),GAM(40,40),SC(40,40),
+     &               SP(40,40),AE(40,40),AW(40,40),AN(40,40),
+     &               AS(40,40),SDX(40,40),SDY(40,40)
+      DIMENSION U(40,40),V(40,40),PC(40,40),T(40,40),W(40,40),P(40,40)
+      EQUIVALENCE    (PHI(1,1),U(1,1)),(PHI(1,41),V(1,1)),
+     &               (PHI(1,81),PC(1,1)),(PHI(1,121),T(1,1)),
+     &               (PHI(1,161),W(1,1)),(PHI(1,201),P(1,1))
+      COMMON/BLOCK0/ NITERT,ITERT,INTPRI,NLUMP,ISCAN,JSCAN,DTIME,
+     &               ISOLVE(10),IPRINT(10),
+     &               LUMPE(10),LUMPW(10),LUMPN(10),LUMPS(10),
+     &               IRMAX,JRMAX,RESMAX
+      COMMON/BLOCK1/ NTIMST,ITURB,IRAD,IREAD,NPHI,IPHI,IU,IV,IPC,IT,
+     &               IW,IP,NI,NJ,JDIM,IREF,JREF,RENO,GRNO,DIRCOS,PR,
+     &               TIME,IFORS(40,40),ALPHA(10),NIM1,NJM1,NIP1,NJP1,
+     &               IEND,JEND,ICNTDF
+      COMMON/BLOCK2/ X(40),Y(40),XP(40),YP(40),DXP(40),DYP(40),
+     &               DXU(40),DYV(40),DX(40),DY(40),DELX(40),DELY(40),
+     &               FACX(40),FACY(40),RX(40),RY(40),BIGNO,ZERO
+      DIMENSION XPR(40),YPR(40),PHIPR(40,40)
+C
+      DATA (HEADIN(I,1),I=1,7)/'X-DI','RECT','ION ','VELO','CITY',
+     &     ', U ','    '/
+      DATA (HEADIN(I,2),I=1,7)/'Y-DI','RECT','ION ','VELO','CITY',
+     &     ', V ','    '/
+      DATA (HEADIN(I,3),I=1,7)/'PRES','SURE',' COR','RECT','ION,',
+     &     ' PC ','    '/
+      DATA (HEADIN(I,4),I=1,7)/'TEMP','ERAT','URE,',' T  ',3*'    '/
+      DATA (HEADIN(I,5),I=1,7)/'SWIR','L VE','LOCI','TY, ','W   ',
+     &     2*'    '/
+      DATA (HEADIN(I,6),I=1,7)/'PRES','SURE',', P ',4*'    '/
+C--------------------------------------------------------------------
+      ENTRY CONVOL
+C
+C-----EVALUATE SPACINGS ASSOCIATED WITH CONTROL VOLUMES.
+C
+      NIP1=NI+1
+      NIM1=NI-1
+      NJP1=NJ+1
+      NJM1=NJ-1
+C
+      DO 1100 I=2,NI
+      DXP(I)=X(I)-X(I-1)
+ 1100 XP(I)=0.5*(X(I)+X(I-1))
+      XP(1)=X(1)-0.5*DXP(2)
+      XP(NIP1)=X(NI)+0.5*DXP(NI)
+      DXP(1)=DXP(2)
+      DXP(NIP1)=DXP(NI)
+      DO 1200 I=1,NI
+ 1200 DXU(I)=XP(I+1)-XP(I)
+      DO 1300 J=2,NJ
+      DYP(J)=Y(J)-Y(J-1)
+ 1300 YP(J)=0.5*(Y(J)+Y(J-1))
+      YP(1)=Y(1)-0.5*DYP(2)
+      YP(NJP1)=Y(NJ)+0.5*DYP(NJ)
+      DYP(1)=DYP(2)
+      DYP(NJP1)=DYP(NJ)
+      DO 1400 J=1,NJ
+ 1400 DYV(J)=YP(J+1)-YP(J)
+      RETURN
+C
+C---------------------------------------------------------------------
+      ENTRY CONFIG
+C
+      NULL=0
+C-----SET IFORS( FLOW FIELD OR SOLID ) = 1 FOR FLOW FIELDS.
+      DO 2100 I=1,NIP1
+      DO 2100 J=1,NJP1
+ 2100 IFORS(I,J)=1
+C-----SET IFORS = 0 FOR SOLID LUMPS OR VELOCITY-KNOWN FIELDS.
+      IF(NLUMP.EQ.0) RETURN
+      DO 2200 K=1,NLUMP
+      DO 2200 I=LUMPW(K),LUMPE(K)
+      DO 2200 J=LUMPS(K),LUMPN(K)
+ 2200 IFORS(I,J)=NULL
+C-----SET IFORS = 2 AT NODES ADJACENT TO VELOCITY-KNOWN BOUNDARIES.
+      DO 2300 K=1,NLUMP
+      DO 2400 I=LUMPW(K),LUMPE(K)
+      J=LUMPS(K)-1
+      IF(J.LE.1) GO TO 2450
+      IF(IFORS(I,J).EQ.1) IFORS(I,J)=2
+ 2450 J=LUMPN(K)+1
+      IF(J.GE.NJP1) GO TO 2400
+      IF(IFORS(I,J).EQ.1) IFORS(I,J)=2
+ 2400 CONTINUE
+      DO 2300 J=LUMPS(K),LUMPN(K)
+      I=LUMPW(K)-1
+      IF(I.LE.1) GO TO 2350
+      IF(IFORS(I,J).EQ.1) IFORS(I,J)=2
+ 2350 I=LUMPE(K)+1
+      IF(I.GE.NIP1) GO TO 2300
+      IF(IFORS(I,J).EQ.1) IFORS(I,J)=2
+ 2300 CONTINUE
+      RETURN
+C
+C---------------------------------------------------------------------
+      ENTRY INITIA
+C
+C
+C-----SET ZEROS TO INITIALIZE QUANTITIES.
+      ZERO=0.
+      NPHIP1=NPHI+1
+      DO 3100 IPHI=1,NPHIP1
+      J0=(IPHI-1)*JDIM
+      DO 3100 J=1,NJP1
+      JJ=J0+J
+      DO 3100 I=1,NIP1
+ 3100 PHI(I,JJ)=ZERO
+      DO 3200 J=1,NJP1
+      DO 3200 I=1,NIP1
+      SDX(I,J)=ZERO
+ 3200 SDY(I,J)=ZERO
+C-----TO AVOID ZERO-DETERMINANT FOR PURE FREE CONVECTION.
+      T(IREF,JREF)=1.E-30
+      RETURN
+C
+C-------------------------------------------------------------------
+      ENTRY PRINTS
+C
+C
+C-----PRINT PHI( FROM U TO P ) WHEN IPRINT = 1.
+      NPHIP1=NPHI+1
+      DO 4100 IPHI=1,NPHIP1
+      IF(IPRINT(IPHI).EQ.0) GO TO 4100
+C-----SET THE PRINTING RANGE AND COORDINATES FOR A PARTICULAR PHI.
+      IEND=NIP1
+      JEND=NJP1
+      J0=(IPHI-1)*JDIM
+      IF(IPHI.NE.IU) GO TO 4200
+      DO 4300 I=1,NI
+ 4300 XPR(I)=X(I)
+      IEND=NI
+      GO TO 4400
+ 4200 DO 4500 I=1,NIP1
+ 4500 XPR(I)=XP(I)
+ 4400 IF(IPHI.NE.IV) GO TO 4600
+      DO 4700 J=1,NJ
+ 4700 YPR(J)=Y(J)
+      JEND=NJ
+      GO TO 4800
+ 4600 DO 4900 J=1,NJP1
+ 4900 YPR(J)=YP(J)
+ 4800 J0=(IPHI-1)*JDIM
+C-----WHEN STORING PHI INTO PHIPR FOR PRINTING, EXTERPOLATE THE VALUE
+C-----ON THE VELOCITY-KNOWN BOUNDARY INTO THE FIELD INSIDE IT.
+      DO 4805 J=1,JEND
+      JJ=J0+J
+      DO 4805 I=1,IEND
+ 4805 PHIPR(I,J)=PHI(I,JJ)
+      IF(IPHI.EQ.IP) GO TO 4850
+      DO 4810 J=2,NJ
+      JJ=J0+J
+      DO 4810 I=2,NI
+      IF(IFORS(I,J).NE.2) GO TO 4810
+      IF(IPHI.EQ.IU) GO TO 4820
+      IF(IPHI.EQ.IV.AND.IFORS(I,J+1).NE.2) GO TO 4820
+      IF(IFORS(I+1,J).NE.0) GO TO 4830
+      FAC=0.5*DXP(I)/DXU(I)
+      PHIPR(I+1,J)=(PHI(I+1,JJ)-(1.-FAC)*PHI(I,JJ))/FAC
+ 4830 IF(IFORS(I-1,J).NE.0) GO TO 4820
+      FAC=0.5*DXP(I)/DXU(I-1)
+      PHIPR(I-1,J)=(PHI(I-1,JJ)-(1.-FAC)*PHI(I,JJ))/FAC
+ 4820 IF(IPHI.EQ.IV) GO TO 4810
+      IF(IPHI.EQ.IU.AND.IFORS(I+1,J).NE.2) GO TO 4810
+      IF(IFORS(I,J+1).NE.0) GO TO 4840
+      FAC=0.5*DYP(J)/DYV(J)
+      PHIPR(I,J+1)=(PHI(I,JJ+1)-(1.-FAC)*PHI(I,JJ))/FAC
+ 4840 IF(IFORS(I,J-1).NE.0) GO TO 4810
+      FAC=0.5*DYP(J)/DYV(J-1)
+      PHIPR(I,J-1)=(PHI(I,JJ-1)-(1.-FAC)*PHI(I,JJ))/FAC
+ 4810 CONTINUE
+C-----EXTERPOLATION AT BOUNDARIES ENDS HERE.
+ 4850 WRITE(6,500) (HEADIN(I,IPHI),I=1,7)
+      IPR=-11
+ 5000 IPR=IPR+12
+      IPREND=IPR+11
+      IPREND=MIN0(IPREND,IEND)
+      WRITE(6,510) (I,I=IPR,IPREND)
+      WRITE(6,520)
+      DO 5100 J=1,JEND
+      JJ=JEND-J+1
+ 5100 WRITE(6,530) JJ,(PHIPR(I,JJ),I=IPR,IPREND),YPR(JJ)
+      WRITE(6,540) (XPR(I),I=IPR,IPREND)
+      IF(IPREND.LT.IEND) GO TO 5000
+ 4100 CONTINUE
+  500 FORMAT(//1X,40(1H*),11X,7A4,11X,40(1H*))
+  510 FORMAT(1H0,2X,1HI,3X,I3,11I10,8X,1HY)
+  520 FORMAT(3H  J)
+  530 FORMAT(I4,1P12E10.2,0PF7.3)
+  540 FORMAT(/4H X =,1PE10.2,11E10.2/)
+      RETURN
+      END
